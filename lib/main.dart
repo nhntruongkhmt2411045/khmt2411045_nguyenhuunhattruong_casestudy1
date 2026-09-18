@@ -9,9 +9,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: WelcomeScreen(),
+      home: const WelcomeScreen(),
     );
   }
 }
@@ -25,34 +25,34 @@ class WelcomeScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
             children: [
               const Spacer(),
-              // Icon ví tiền
+              // Icon chiếc ví
               Icon(
-                Icons.account_balance_wallet,
+                Icons.account_balance_wallet_rounded,
                 size: 120,
-                color: Colors.blue.shade600,
+                color: Color(0xFF1E68D7),
               ),
               const SizedBox(height: 32),
-              // Tiêu đề
+              // Tiêu đề ứng dụng
               const Text(
                 'Expense Manager',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF0F172A),
                 ),
               ),
               const SizedBox(height: 12),
-              // Mô tả
+              // Dòng mô tả
               const Text(
                 'Quản lý chi tiêu cá nhân\nđơn giản và hiệu quả',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
+                  fontSize: 15,
+                  color: Color(0xFF64748B),
                   height: 1.4,
                 ),
               ),
@@ -62,13 +62,15 @@ class WelcomeScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // Xử lý sự kiện khi bấm nút ở đây
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1565C0),
+                    backgroundColor: const Color(0xFF1D61E7),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    elevation: 0,
                   ),
                   child: const Text(
                     'Bắt đầu',
@@ -80,7 +82,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
             ],
           ),
         ),
