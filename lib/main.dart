@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'database/database_helper.dart';
 
 void main() {
   runApp(const MyApp());
@@ -24,24 +25,108 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// =====================================================
-// DASHBOARD - BUỔI 4
-// =====================================================
+String formatMoney(num amount) {
+  final value = amount.round().toString();
+  final buffer = StringBuffer();
+  for (int i = 0; i < value.length; i++) {
+    if (i > 0 && (value.length - i) % 3 == 0) {
+      buffer.write('.');
+    }
+    buffer.write(value[i]);
+  }
+  return '${buffer.toString()} đ';
+}
 
-class HomeScreen extends StatelessWidget {
+String formatAmountInput(String value) {
+  final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.isEmpty) return '';
+
+  final buffer = StringBuffer();
+  for (int i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) {
+      buffer.write('.');
+    }
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
+int parseAmount(String value) {
+  return int.tryParse(value.replaceAll('.', '').replaceAll(',', '')) ?? 0;
+}
+
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Map<String, dynamic>> transactions = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTransactions();
+  }
+
+  Future<void> _loadTransactions() async {
+    final data = await DatabaseHelper.instance.getTransactions();
+    if (!mounted) return;
+    setState(() {
+      transactions = data;
+      loading = false;
+    });
+  }
+
+  Future<void> _openAdd() async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AddTransactionScreen(),
+      ),
+    );
+    if (saved == true) {
+      await _loadTransactions();
+    }
+  }
+
+  Future<void> _openEdit(Map<String, dynamic> transaction) async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditTransactionScreen(transaction: transaction),
+      ),
+    );
+    if (updated == true) {
+      await _loadTransactions();
+    }
+  }
+
+  double get totalIncome {
+    return transactions
+        .where((e) => e['isExpense'] == 0)
+        .fold<double>(0, (sum, e) => sum + (e['amount'] as num).toDouble());
+  }
+
+  double get totalExpense {
+    return transactions
+        .where((e) => e['isExpense'] == 1)
+        .fold<double>(0, (sum, e) => sum + (e['amount'] as num).toDouble());
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final balance = totalIncome - totalExpense;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F8FC),
         elevation: 0,
-        leading: const Icon(
-          Icons.menu,
-          color: Color(0xFF172033),
-        ),
+        leading: const Icon(Icons.menu, color: Color(0xFF172033)),
         title: const Text(
           'Quản lý thu chi',
           style: TextStyle(
@@ -83,192 +168,154 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // SỐ DƯ
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF4B86F7),
-                    Color(0xFF1461E8),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+        onRefresh: _loadTransactions,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4B86F7), Color(0xFF1461E8)],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'SỐ DƯ HIỆN TẠI',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          formatMoney(balance),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.visibility_outlined,
+                          color: Colors.white,
+                          size: 19,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _dot(true),
+                        _dot(false),
+                        _dot(false),
+                      ],
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(15),
               ),
-              child: Column(
+              const SizedBox(height: 10),
+              Row(
                 children: [
-                  const Text(
-                    'SỐ DƯ HIỆN TẠI',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: _summaryCard(
+                      title: 'TỔNG THU NHẬP',
+                      amount: formatMoney(totalIncome),
+                      icon: Icons.arrow_downward,
+                      color: const Color(0xFF39A94B),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '5.000.000 đ',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(
-                        Icons.visibility_outlined,
-                        color: Colors.white,
-                        size: 19,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _dot(true),
-                      _dot(false),
-                      _dot(false),
-                    ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _summaryCard(
+                      title: 'TỔNG CHI TIÊU',
+                      amount: formatMoney(totalExpense),
+                      icon: Icons.arrow_upward,
+                      color: const Color(0xFFFF6268),
+                    ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // TỔNG THU / CHI
-            Row(
-              children: [
-                Expanded(
-                  child: _summaryCard(
-                    title: 'TỔNG THU NHẬP',
-                    amount: '8.000.000 đ',
-                    icon: Icons.arrow_downward,
-                    color: const Color(0xFF39A94B),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _summaryCard(
-                    title: 'TỔNG CHI TIÊU',
-                    amount: '3.000.000 đ',
-                    icon: Icons.arrow_upward,
-                    color: const Color(0xFFFF6268),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 14),
-
-            // GIAO DỊCH GẦN ĐÂY
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Giao dịch gần đây',
-                  style: TextStyle(
-                    color: Color(0xFF172033),
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text(
-                    'Xem tất cả',
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Giao dịch gần đây',
                     style: TextStyle(
-                      color: Color(0xFF2878E8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF172033),
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text(
+                      'Xem tất cả',
+                      style: TextStyle(
+                        color: Color(0xFF2878E8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (transactions.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(30),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'Chưa có giao dịch\nNhấn nút + để thêm giao dịch',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF7A8190)),
+                  ),
+                )
+              else
+                ...transactions.take(10).map(
+                      (transaction) => _transaction(
+                    context: context,
+                    transaction: transaction,
+                    onTap: () => _openEdit(transaction),
+                  ),
                 ),
-              ],
-            ),
-
-            _transaction(
-              context: context,
-              icon: Icons.restaurant,
-              color: const Color(0xFFFF7A21),
-              title: 'Ăn trưa',
-              category: 'Ăn uống',
-              date: '03/09/2024',
-              amount: '-50.000 đ',
-              isExpense: true,
-            ),
-            _transaction(
-              context: context,
-              icon: Icons.local_gas_station,
-              color: const Color(0xFF2694F2),
-              title: 'Xăng xe',
-              category: 'Di chuyển',
-              date: '03/09/2024',
-              amount: '-100.000 đ',
-              isExpense: true,
-            ),
-            _transaction(
-              context: context,
-              icon: Icons.attach_money,
-              color: const Color(0xFF29A846),
-              title: 'Lương tháng 9',
-              category: 'Thu nhập',
-              date: '01/09/2024',
-              amount: '+8.000.000 đ',
-              isExpense: false,
-            ),
-            _transaction(
-              context: context,
-              icon: Icons.shopping_cart,
-              color: const Color(0xFF9B45EF),
-              title: 'Mua sắm',
-              category: 'Mua sắm',
-              date: '31/08/2024',
-              amount: '-300.000 đ',
-              isExpense: true,
-            ),
-            _transaction(
-              context: context,
-              icon: Icons.school,
-              color: const Color(0xFF159C9A),
-              title: 'Học phí',
-              category: 'Giáo dục',
-              date: '30/08/2024',
-              amount: '-500.000 đ',
-              isExpense: true,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2878E8),
         foregroundColor: Colors.white,
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const AddTransactionScreen(),
-            ),
-          );
-        },
+        onPressed: _openAdd,
         child: const Icon(Icons.add, size: 30),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
-        selectedItemColor: Color(0xFF2878E8),
-        unselectedItemColor: Color(0xFF7A8190),
+        selectedItemColor: const Color(0xFF2878E8),
+        unselectedItemColor: const Color(0xFF7A8190),
         type: BottomNavigationBarType.fixed,
-        items: [
+        onTap: (index) {
+          if (index == 1) {
+            _openAdd();
+          }
+        },
+        items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home),
@@ -290,10 +337,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// =====================================================
-// WIDGET PHỤ CỦA DASHBOARD
-// =====================================================
-
 Widget _dot(bool active) {
   return Container(
     margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -313,10 +356,7 @@ Widget _summaryCard({
   required Color color,
 }) {
   return Container(
-    padding: const EdgeInsets.symmetric(
-      horizontal: 10,
-      vertical: 10,
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(11),
@@ -326,11 +366,7 @@ Widget _summaryCard({
         CircleAvatar(
           radius: 16,
           backgroundColor: color.withValues(alpha: 0.14),
-          child: Icon(
-            icon,
-            color: color,
-            size: 19,
-          ),
+          child: Icon(icon, color: color, size: 19),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -368,47 +404,54 @@ Widget _summaryCard({
 
 Widget _transaction({
   required BuildContext context,
-  required IconData icon,
-  required Color color,
-  required String title,
-  required String category,
-  required String date,
-  required String amount,
-  required bool isExpense,
+  required Map<String, dynamic> transaction,
+  required VoidCallback onTap,
 }) {
+  final bool isExpense = transaction['isExpense'] == 1;
+  final String category = transaction['category'] as String? ?? '';
+  final String title = transaction['title'] as String? ?? category;
+  final String date = transaction['date'] as String? ?? '';
+  final double amount = (transaction['amount'] as num).toDouble();
+
+  IconData icon;
+  Color color;
+  switch (category) {
+    case 'Ăn uống':
+      icon = Icons.restaurant;
+      color = const Color(0xFFFF7A21);
+      break;
+    case 'Mua sắm':
+      icon = Icons.shopping_cart;
+      color = const Color(0xFF9B45EF);
+      break;
+    case 'Di chuyển':
+      icon = Icons.local_gas_station;
+      color = const Color(0xFF2694F2);
+      break;
+    case 'Giáo dục':
+      icon = Icons.school;
+      color = const Color(0xFF159C9A);
+      break;
+    default:
+      icon = isExpense ? Icons.arrow_upward : Icons.attach_money;
+      color = isExpense ? const Color(0xFFFF6268) : const Color(0xFF29A846);
+  }
+
   return InkWell(
     borderRadius: BorderRadius.circular(10),
-    onTap: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const EditTransactionScreen(),
-        ),
-      );
-    },
+    onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.grey.shade200,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 17,
             backgroundColor: color,
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 18,
-            ),
+            child: Icon(icon, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -447,7 +490,7 @@ Widget _transaction({
             ),
           ),
           Text(
-            amount,
+            '${isExpense ? '-' : '+'}${formatMoney(amount)}',
             style: TextStyle(
               color: isExpense
                   ? const Color(0xFFFF3F4B)
@@ -462,20 +505,14 @@ Widget _transaction({
   );
 }
 
-// =====================================================
-// MÀN HÌNH THÊM GIAO DỊCH
-// =====================================================
-
 class AddTransactionScreen extends StatefulWidget {
   const AddTransactionScreen({super.key});
 
   @override
-  State<AddTransactionScreen> createState() =>
-      _AddTransactionScreenState();
+  State<AddTransactionScreen> createState() => _AddTransactionScreenState();
 }
 
-class _AddTransactionScreenState
-    extends State<AddTransactionScreen> {
+class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool isExpense = true;
   String category = 'Ăn uống';
 
@@ -493,6 +530,30 @@ class _AddTransactionScreenState
     super.dispose();
   }
 
+  Future<void> _save() async {
+    final amount = parseAmount(amountController.text);
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập số tiền hợp lệ')),
+      );
+      return;
+    }
+
+    await DatabaseHelper.instance.insertTransaction({
+      'title': noteController.text.trim().isEmpty
+          ? category
+          : noteController.text.trim(),
+      'category': category,
+      'amount': amount,
+      'date': dateController.text,
+      'note': noteController.text.trim(),
+      'isExpense': isExpense ? 1 : 0,
+    });
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return TransactionForm(
@@ -502,52 +563,46 @@ class _AddTransactionScreenState
       amountController: amountController,
       dateController: dateController,
       noteController: noteController,
-      onExpenseChanged: () {
-        setState(() => isExpense = true);
-      },
-      onIncomeChanged: () {
-        setState(() => isExpense = false);
-      },
-      onCategoryChanged: (value) {
-        setState(() => category = value);
-      },
-      onSave: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã lưu giao dịch'),
-          ),
-        );
-      },
+      onExpenseChanged: () => setState(() => isExpense = true),
+      onIncomeChanged: () => setState(() => isExpense = false),
+      onCategoryChanged: (value) => setState(() => category = value),
+      onSave: _save,
     );
   }
 }
 
-// =====================================================
-// MÀN HÌNH SỬA GIAO DỊCH
-// =====================================================
-
 class EditTransactionScreen extends StatefulWidget {
-  const EditTransactionScreen({super.key});
+  final Map<String, dynamic> transaction;
+
+  const EditTransactionScreen({super.key, required this.transaction});
 
   @override
-  State<EditTransactionScreen> createState() =>
-      _EditTransactionScreenState();
+  State<EditTransactionScreen> createState() => _EditTransactionScreenState();
 }
 
-class _EditTransactionScreenState
-    extends State<EditTransactionScreen> {
-  bool isExpense = true;
-  String category = 'Ăn uống';
+class _EditTransactionScreenState extends State<EditTransactionScreen> {
+  late bool isExpense;
+  late String category;
+  late TextEditingController amountController;
+  late TextEditingController dateController;
+  late TextEditingController noteController;
 
-  final amountController = TextEditingController(
-    text: '100000',
-  );
-  final dateController = TextEditingController(
-    text: '03/09/2024',
-  );
-  final noteController = TextEditingController(
-    text: 'Ăn trưa',
-  );
+  @override
+  void initState() {
+    super.initState();
+    isExpense = widget.transaction['isExpense'] == 1;
+    category = widget.transaction['category'] as String? ?? 'Ăn uống';
+    final amount = (widget.transaction['amount'] as num?)?.toInt() ?? 0;
+    amountController = TextEditingController(
+      text: formatAmountInput(amount.toString()),
+    );
+    dateController = TextEditingController(
+      text: widget.transaction['date'] as String? ?? '',
+    );
+    noteController = TextEditingController(
+      text: widget.transaction['note'] as String? ?? '',
+    );
+  }
 
   @override
   void dispose() {
@@ -555,6 +610,32 @@ class _EditTransactionScreenState
     dateController.dispose();
     noteController.dispose();
     super.dispose();
+  }
+
+  Future<void> _update() async {
+    final amount = parseAmount(amountController.text);
+    final id = widget.transaction['id'] as int?;
+
+    if (id == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dữ liệu giao dịch không hợp lệ')),
+      );
+      return;
+    }
+
+    await DatabaseHelper.instance.updateTransaction(id, {
+      'title': noteController.text.trim().isEmpty
+          ? category
+          : noteController.text.trim(),
+      'category': category,
+      'amount': amount,
+      'date': dateController.text,
+      'note': noteController.text.trim(),
+      'isExpense': isExpense ? 1 : 0,
+    });
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
   }
 
   @override
@@ -566,29 +647,13 @@ class _EditTransactionScreenState
       amountController: amountController,
       dateController: dateController,
       noteController: noteController,
-      onExpenseChanged: () {
-        setState(() => isExpense = true);
-      },
-      onIncomeChanged: () {
-        setState(() => isExpense = false);
-      },
-      onCategoryChanged: (value) {
-        setState(() => category = value);
-      },
-      onSave: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã cập nhật giao dịch'),
-          ),
-        );
-      },
+      onExpenseChanged: () => setState(() => isExpense = true),
+      onIncomeChanged: () => setState(() => isExpense = false),
+      onCategoryChanged: (value) => setState(() => category = value),
+      onSave: _update,
     );
   }
 }
-
-// =====================================================
-// FORM DÙNG CHUNG
-// =====================================================
 
 class TransactionForm extends StatelessWidget {
   final String title;
@@ -620,46 +685,29 @@ class TransactionForm extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF172033),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Color(0xFF344054),
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF172033),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-
-              const SizedBox(height: 15),
-
-              // CHI TIÊU / THU NHẬP
               Container(
                 height: 52,
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: const Color(0xFFE0E5EC),
-                  ),
+                  border: Border.all(color: const Color(0xFFE0E5EC)),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -715,9 +763,7 @@ class TransactionForm extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
               const Text(
                 'Danh mục',
                 style: TextStyle(
@@ -727,14 +773,11 @@ class TransactionForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
               Container(
                 height: 50,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: const Color(0xFFD9E0E8),
-                  ),
+                  border: Border.all(color: const Color(0xFFD9E0E8)),
                   borderRadius: BorderRadius.circular(9),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -747,10 +790,7 @@ class TransactionForm extends StatelessWidget {
                         value: 'Ăn uống',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.restaurant,
-                              color: Color(0xFFFF6268),
-                            ),
+                            Icon(Icons.restaurant, color: Color(0xFFFF6268)),
                             SizedBox(width: 10),
                             Text('Ăn uống'),
                           ],
@@ -760,10 +800,7 @@ class TransactionForm extends StatelessWidget {
                         value: 'Mua sắm',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.shopping_cart,
-                              color: Color(0xFF2878E8),
-                            ),
+                            Icon(Icons.shopping_cart, color: Color(0xFF2878E8)),
                             SizedBox(width: 10),
                             Text('Mua sắm'),
                           ],
@@ -773,10 +810,7 @@ class TransactionForm extends StatelessWidget {
                         value: 'Di chuyển',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.directions_car,
-                              color: Color(0xFF2878E8),
-                            ),
+                            Icon(Icons.directions_car, color: Color(0xFF2878E8)),
                             SizedBox(width: 10),
                             Text('Di chuyển'),
                           ],
@@ -786,10 +820,7 @@ class TransactionForm extends StatelessWidget {
                         value: 'Giáo dục',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.school,
-                              color: Color(0xFF159C9A),
-                            ),
+                            Icon(Icons.school, color: Color(0xFF159C9A)),
                             SizedBox(width: 10),
                             Text('Giáo dục'),
                           ],
@@ -797,16 +828,12 @@ class TransactionForm extends StatelessWidget {
                       ),
                     ],
                     onChanged: (value) {
-                      if (value != null) {
-                        onCategoryChanged(value);
-                      }
+                      if (value != null) onCategoryChanged(value);
                     },
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               const Text(
                 'Số tiền',
                 style: TextStyle(
@@ -816,10 +843,20 @@ class TransactionForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  final formatted = formatAmountInput(value);
+                  if (formatted != value) {
+                    amountController.value = TextEditingValue(
+                      text: formatted,
+                      selection: TextSelection.collapsed(
+                        offset: formatted.length,
+                      ),
+                    );
+                  }
+                },
                 decoration: InputDecoration(
                   hintText: 'Nhập số tiền',
                   suffixText: 'đ',
@@ -828,9 +865,7 @@ class TransactionForm extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               const Text(
                 'Ngày giao dịch',
                 style: TextStyle(
@@ -840,7 +875,6 @@ class TransactionForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
               TextField(
                 controller: dateController,
                 readOnly: true,
@@ -857,7 +891,6 @@ class TransactionForm extends StatelessWidget {
                     firstDate: DateTime(2020),
                     lastDate: DateTime(2035),
                   );
-
                   if (date != null) {
                     dateController.text =
                     '${date.day.toString().padLeft(2, '0')}/'
@@ -866,9 +899,7 @@ class TransactionForm extends StatelessWidget {
                   }
                 },
               ),
-
               const SizedBox(height: 20),
-
               const Text(
                 'Ghi chú',
                 style: TextStyle(
@@ -878,7 +909,6 @@ class TransactionForm extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
               TextField(
                 controller: noteController,
                 maxLines: 3,
@@ -889,9 +919,7 @@ class TransactionForm extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 24),
-
               SizedBox(
                 width: double.infinity,
                 height: 52,

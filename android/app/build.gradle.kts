@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.my_first_app"
-    compileSdk = 35
+    compileSdk = 36
 
     ndkVersion = "" //
 
